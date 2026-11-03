@@ -231,13 +231,12 @@ function listHash(f) {
 const LONG_SECONDS = 20 * 60;
 const LONG_FORMATS = new Set(['talk', 'lecture', 'course', 'documentary', 'interview', 'podcast']);
 const isLong = v => v.ln ? v.ln >= LONG_SECONDS : LONG_FORMATS.has(v.ct);
-const LONG_RULE = 'Long means 20 minutes or more. Where the running time isn’t known, it goes by format: talks, lectures, courses, documentaries, interviews and podcasts count as long.';
 const RECENT_MONTHS = 12;
 const PRESETS = {
   home: { heading: 'Most recommended on 4chan', title: '' },
-  long: { heading: 'Long watches', sub: LONG_RULE, test: isLong },
-  gems: { heading: 'Hidden gems', sub: 'Few threads, but at least two of them enthusiastic.', test: v => v.rc >= 2 && v.rc <= 5 && v.ss >= 2 },
-  recent: { heading: 'Recent', sub: `Recommended on 4chan in the last ${RECENT_MONTHS} months of the data.`, test: v => v.rc > 0 && D.latest - monthIndex(v.lm) < RECENT_MONTHS },
+  long: { heading: 'Long watches', test: isLong },
+  gems: { heading: 'Hidden gems', sub: '', test: v => v.rc >= 2 && v.rc <= 5 && v.ss >= 2 },
+  recent: { heading: 'Recent', sub: '', test: v => v.rc > 0 && D.latest - monthIndex(v.lm) < RECENT_MONTHS },
 };
 const haystack = v => v._s || (v._s = `${v.t} ${v.c} ${v.s}`);
 // Whole words only; lookarounds rather than \b so terms like "c++" and ".net" still match.
@@ -260,7 +259,6 @@ function activeAreaIndex(f) {
 }
 
 /* Google Cast. The SDK loads once, on the first video page, so requestSession() still runs inside the click's user gesture. */
-const CAST_HINT = 'Cast unavailable in this browser';
 let castSdk;
 function loadCast() {
   return castSdk || (castSdk = new Promise(resolve => {
@@ -273,14 +271,14 @@ function loadCast() {
   }));
 }
 async function castVideo(vid, status) {
-  if (!await loadCast()) { status.textContent = CAST_HINT; return; }
+  if (!await loadCast()) return;
   const ctx = cast.framework.CastContext.getInstance();
   try {
     if (!ctx.getCurrentSession()) await ctx.requestSession();
     await ctx.getCurrentSession().sendMessage('urn:x-cast:com.google.youtube.mdx', { type: 'flingVideo', data: { currentTime: 0, videoId: vid } });
-    status.textContent = "Sent to your TV. If it doesn't start, use the player's cast icon.";
+    status.textContent = 'Sent to TV';
   } catch (e) {
-    status.textContent = e === 'cancel' ? 'Cast cancelled.' : `Cast failed (${e.code || e}). ${CAST_HINT}`;
+    status.textContent = e === 'cancel' ? '' : 'Cast failed';
   }
 }
 
@@ -348,11 +346,11 @@ function grid(items, shownFrom, makeCard = card) {
 }
 function setTitle(title) { document.title = title ? `${title} — ${SITE_TITLE}` : SITE_TITLE; }
 function heading(text, sub) {
-  return h('div', { className: 'head' }, h('h1', { tabIndex: -1, title: sub || '' }, text));
+  return h('div', { className: 'head' }, h('h1', { tabIndex: -1 }, text));
 }
 function emptyView(title, message) {
   setTitle(title);
-  view.replaceChildren(h('div', { className: 'empty' }, h('h1', { tabIndex: -1 }, title), h('p', { className: 'note' }, message),
+  view.replaceChildren(h('div', { className: 'empty' }, h('h1', { tabIndex: -1 }, title), message ? h('p', { className: 'note' }, message) : null,
     h('div', { className: 'links' }, h('a', { className: 'pill', href: '#/' }, 'Go home'), h('a', { className: 'pill', href: '#/categories' }, 'Browse categories'))));
 }
 
@@ -407,7 +405,7 @@ function filterPanel(r, newsTotal) {
     r.page === 'long' ? null : select('f-len', 'Length', r.len, [['', 'Any length'], ['long', 'Long'], ['short', 'Shorter']], e => go({ len: e.target.value }, 'f-len')),
     h('label', { className: 'check' }, h('input', { id: 'f-news', type: 'checkbox', checked: r.news, onchange: e => go({ news: e.target.checked }, 'f-news') }), `Show news (${num(newsTotal)})`),
     dirty ? h('a', { className: 'reset', href: listHash({ ...r, sort: '', len: '', news: showNewsByDefault() }) }, 'Reset') : null,
-    r.page === 'long' ? null : h('p', { className: 'sub' }, LONG_RULE));
+  );
 }
 function setFiltersOpen(open) {
   const panel = $('filters-panel');
@@ -448,7 +446,7 @@ function renderList(name) {
   view.replaceChildren(
     heading(label, plural(items.length, 'video')),
     ...(items.length ? grid(items, items.length) : [h('p', { className: 'note' },
-      { later: 'Nothing saved yet. Use the Watch later button on any video.', watched: 'Nothing marked as watched yet.', liked: 'Nothing liked yet. Use the Like button on any video.' }[name])]));
+      { later: 'Nothing saved yet.', watched: 'Nothing marked as watched yet.', liked: 'Nothing liked yet.' }[name])]));
 }
 function crumbTo(href, label) {
   return h('nav', { className: 'crumbs', 'aria-label': 'Breadcrumb' }, h('a', { href }, label));
@@ -474,7 +472,7 @@ function renderPlaylists() {
 }
 function renderPlaylist(id) {
   const p = findPlaylist(id);
-  if (!p) return emptyView('Playlist not found', 'It may have been deleted, or it was made in another browser.');
+  if (!p) return emptyView('Playlist not found', '');
   const items = p.vids.map(vid => byVid.get(vid)).filter(Boolean);
   const change = (vid, focusSelector) => {
     storePlaylists();
@@ -531,7 +529,7 @@ function renderCollections() {
   const section = (title, g) => [h('h2', { className: 'section' }, title),
     h('div', { className: 'grid' }, D.cols.filter(c => c.g === g).map(c => tile(`#/collections/${c.id}`, c.t, plural(c.i.length, 'video'), D.videos[c.i[0]].v)))];
   setTitle('Collections');
-  view.replaceChildren(heading('Collections', 'Reading lists for your eyes, picked automatically from the data each time the site is built.'),
+  view.replaceChildren(heading('Collections', ''),
     ...section('Themes', 'theme'), ...section('Best of each area', 'area'));
 }
 function renderCollection(id, memo) {
@@ -555,7 +553,7 @@ function renderCategories() {
   countCategories();
   setTitle('Categories');
   view.replaceChildren(
-    heading('Categories', `${D.areas.length} areas and ${D.cats.length} categories. ${showNewsByDefault() ? 'Counts include news videos, as you’ve set the lists to.' : 'Counts leave out news videos, as the lists do by default.'}`),
+    heading('Categories', ''),
     h('div', { className: 'areas' }, byCount(D.areas, D.areaCount).map(({ item: a, i }) => h('section', { className: 'area', 'aria-labelledby': `area-${a.id}` },
       h('h2', { id: `area-${a.id}` }, h('a', { href: `#/a/${a.id}` }, a.name, h('span', { className: 'num' }, num(D.areaCount[i])))),
       h('ul', {}, byCount(D.cats, D.catCount).filter(({ item: c }) => c.a === i).map(({ item: c, i: k }) =>
@@ -588,7 +586,6 @@ function renderSettings() {
         try { localStorage.setItem(NEWS_KEY, e.target.checked ? '1' : '0'); } catch { /* storage full or blocked */ }
         filters = baseFilters();
       } }), 'Hide news videos by default'),
-    h('p', { className: 'sub' }, 'News videos only matter around one event. Filters can still show or hide them on any list.'),
     h('h2', {}, 'Your lists'),
     h('ul', { className: 'setting-rows' },
       CLEARABLE.map(([name, label]) => clearRow(label, saved[name].size, () => { saved[name].clear(); storeList(name); })),
@@ -640,7 +637,7 @@ async function importLists(file) {
   ok = storePlaylists() && ok;
   render();
   settleFocus();
-  report(ok ? `Imported ${plural(added, 'video')} into your lists and ${plural(incoming.length, 'playlist')}.` : 'Import failed: this browser wouldn’t save the data.');
+  report(ok ? `Imported ${plural(added, 'video')} into your lists and ${plural(incoming.length, 'playlist')}.` : 'Import failed');
 }
 function renderAbout() {
   setTitle('Keys');
@@ -653,13 +650,14 @@ function renderAbout() {
 }
 function renderVideo(vid) {
   const v = byVid.get(vid);
-  if (!v) return emptyView('Video not found', 'That video isn’t in this collection.');
+  if (!v) return emptyView('Video not found', '');
   const related = v.r.map(i => D.videos[i]).filter(r => filters.news || !r.n || v.n).slice(0, RELATED_SHOWN);
+  const castBtn = h('button', { type: 'button', className: 'pill primary', 'aria-label': 'Cast', onclick: () => castVideo(v.v, castStatus) }, icon('cast'), 'Cast to TV');
   const castStatus = h('div', { className: 'meta status', 'aria-live': 'polite' });
-  loadCast().then(ok => { if (!ok) castStatus.textContent = CAST_HINT; });
+  loadCast().then(ok => { if (!ok) castBtn.hidden = true; });
   const actions = h('div', { className: 'actions' }, actionButtons(v, false, ['liked', 'disliked']), actionButtons(v), saveMenu(v),
-    h('button', { type: 'button', className: 'pill primary', title: 'Cast to a Chromecast (Chrome)', onclick: () => castVideo(v.v, castStatus) }, icon('cast'), 'Cast to TV'),
-    h('a', { className: 'pill', href: `https://www.youtube.com/watch?v=${v.v}`, target: '_blank', rel: 'noopener', title: 'Open in the YouTube app or site' }, icon('external'), 'Open in YouTube'));
+    castBtn,
+    h('a', { className: 'pill', href: `https://www.youtube.com/watch?v=${v.v}`, target: '_blank', rel: 'noopener' }, icon('external'), 'Open in YouTube'));
   actions.dataset.vid = v.v;
   paint(actions);
   const ytLine = viewLine(v, true);
@@ -674,7 +672,7 @@ function renderVideo(vid) {
         allow: 'autoplay; encrypted-media; picture-in-picture; fullscreen',
         referrerPolicy: 'strict-origin-when-cross-origin' }),
       h('h1', { tabIndex: -1 }, v.t),
-      h('a', { className: 'channel', href: listHash({ ...baseFilters(), page: 'search', q: v.c }), title: 'Search for this channel' }, v.c),
+      h('a', { className: 'channel', href: listHash({ ...baseFilters(), page: 'search', q: v.c }) }, v.c),
       v.ln || ytLine ? h('div', { className: 'meta yt-line' }, v.ln ? h('span', { className: 'badge inline', title: 'Running time' }, clock(v.ln)) : null, ytLine) : null,
       h('div', { className: 'meta' }, stats),
       actions,
@@ -683,7 +681,7 @@ function renderVideo(vid) {
       h('div', { className: 'box' },
         h('p', { className: 'meta' }, `${v.ct} · ${v.rc ? 'last recommended' : 'last cited'} ${ago(v.lm)}`),
         h('p', {}, v.s),
-        h('p', {}, h('b', {}, 'Why 4chan: '), v.w),
+        h('p', {}, v.w),
         h('div', { className: 'chips wrap' }, v.k.map(k => chip(D.cats[k].name, null, listHash({ ...baseFilters(), page: 'c', id: D.cats[k].id, news: filters.news }))))),
       h('h2', {}, 'Top 4chan recommendations'),
       v.m.length ? v.m.map(comment) : h('p', { className: 'note' }, '—')),
@@ -760,7 +758,7 @@ function surprise() {
   const current = route().vid;
   const m = matcher(filters);
   const pool = D.videos.filter(v => v.sc > 0 && m(v) && !saved.watched.has(v.v) && !saved.disliked.has(v.v) && v.v !== current);
-  if (!pool.length) return toast('Nothing left to pick from under the current filters.');
+  if (!pool.length) return toast('Nothing to pick');
   let r = Math.random() * pool.reduce((sum, v) => sum + v.sc, 0);
   const pick = pool.find(v => (r -= v.sc) < 0) || pool[pool.length - 1];
   location.hash = `#/v/${pick.v}`;
@@ -983,5 +981,5 @@ fetch('data/videos.json')
   })
   .catch(err => {
     view.replaceChildren(h('p', { className: 'note' },
-      `Could not load data/videos.json (${err.message}). Run python3 build.py, then python3 -m http.server from ./app.`));
+      'Could not load data'));
   });
