@@ -1,6 +1,6 @@
 'use strict';
 const PAGE = 60, RELATED_SHOWN = 12;
-const SITE_TITLE = "ChanTube — private 4chan pilot";
+const SITE_TITLE = "ChanTube";
 const $ = id => document.getElementById(id);
 const root = document.documentElement;
 const view = $('view'), search = $('search'), side = $('side');
